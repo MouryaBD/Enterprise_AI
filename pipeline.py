@@ -38,13 +38,7 @@ def run_pipeline(account_id: str, run_id: str, start_stage: int = 1):
             sos_result = mock_data.mock_sos_lookup(account["business_name"])
             if sos_result:
                 legal_data = sos_result
-                conn = db._get_conn()
-                conn.execute(
-                    "UPDATE runs SET legal_locked=1, updated_at=? WHERE run_id=?",
-                    (db._now_iso(), run_id)
-                )
-                conn.commit()
-                conn.close()
+                db.set_legal_locked(run_id)
             else:
                 db.log_event(run_id, "stage_skipped", {"stage": 1, "reason": "sos_unavailable"})
 

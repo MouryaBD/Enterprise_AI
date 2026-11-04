@@ -24,6 +24,12 @@ python -c "from db import create_db; create_db()"
 python import_accounts.py --file "Input example.xlsx"
 ```
 
+### 3. Confirm accounts were imported
+
+```bash
+python -c "from db import get_pending_accounts; print(get_pending_accounts())"
+```
+
 ## Testing
 
 ### 4. Run tests (no API key needed)
@@ -44,21 +50,20 @@ export ANTHROPIC_API_KEY=your_key_here
 
 ### 6. Enrich all pending accounts
 
-Insert rows into `pending_events` for each account, then run:
-
 ```bash
-python poll_events.py
-```
-
-Or run the pipeline directly:
-
-```python
-from db import create_run, update_state
-from pipeline import run_pipeline
-
-run_id = create_run("ACCOUNT-ID")
-update_state(run_id, "running")
-run_pipeline("ACCOUNT-ID", run_id)
+python -c "
+from db import create_db, get_pending_accounts, create_run, update_state
+from poll_events import poll_events
+import sqlite3, uuid, datetime
+create_db()
+conn = sqlite3.connect('enrichment.db')
+for aid in get_pending_accounts():
+    conn.execute('INSERT INTO pending_events VALUES (?,?,?,?,0)',
+        [str(uuid.uuid4()), aid, 'new_enrichment_request',
+         datetime.datetime.utcnow().isoformat()])
+conn.commit(); conn.close()
+poll_events()
+"
 ```
 
 ## Review Low-Confidence Fields
