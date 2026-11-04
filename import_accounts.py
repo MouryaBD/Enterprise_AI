@@ -3,7 +3,7 @@ Import accounts from an Excel file into enrichment.db.
 Run as: python import_accounts.py --file "Input example.xlsx"
 """
 import argparse
-import sys
+import openpyxl
 
 import db
 
@@ -15,19 +15,16 @@ def main():
 
     db.create_db()
 
-    conn_before = db._get_conn()
-    before_count = conn_before.execute("SELECT COUNT(*) FROM accounts").fetchone()[0]
-    conn_before.close()
+    # Count total data rows in xlsx to report how many already existed
+    wb = openpyxl.load_workbook(args.file)
+    ws = wb.active
+    total_data_rows = sum(
+        1 for row in ws.iter_rows(min_row=2) if any(cell.value for cell in row)
+    )
+    wb.close()
 
     inserted = db.import_accounts(args.file)
-
-    conn_after = db._get_conn()
-    after_count = conn_after.execute("SELECT COUNT(*) FROM accounts").fetchone()[0]
-    conn_after.close()
-
-    already_existed = (after_count - before_count - inserted) + (before_count - 0)
-    # Simpler: total rows that were skipped
-    skipped = before_count
+    skipped = total_data_rows - inserted
 
     print(f"Imported {inserted} accounts. {skipped} already existed.")
 
