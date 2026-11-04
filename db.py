@@ -335,6 +335,18 @@ def update_review_decision(review_id: int, status: str, reviewer_id: str):
     conn.close()
 
 
+def set_legal_locked(run_id: str):
+    now = _now_iso()
+    conn = _get_conn()
+    c = conn.cursor()
+    c.execute(
+        "UPDATE runs SET legal_locked=1, updated_at=? WHERE run_id=?",
+        (now, run_id)
+    )
+    conn.commit()
+    conn.close()
+
+
 def check_duplicate_run(account_id: str) -> Optional[str]:
     """
     Returns run_id if a run exists for this account in a non-terminal state
