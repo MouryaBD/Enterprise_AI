@@ -31,6 +31,17 @@ def run_pipeline(account_id: str, run_id: str, start_stage: int = 1):
 
         account = db.get_account(account_id)
 
+        # Seed field_results from any pre-existing account data (e.g. imported from xlsx)
+        # so downstream stages cannot overwrite already-known values
+        for _f in config.ALL_FIELDS:
+            if _f not in config.LEGAL_FIELDS and account.get(_f) is not None:
+                field_results[_f] = {
+                    "value": account[_f],
+                    "confidence": 1.0,
+                    "evidence_quote": "pre-existing account data",
+                    "source": "account_seed",
+                }
+
         # ------------------------------------------------------------------ #
         # STAGE 1 — GA SOS legal resolution
         # ------------------------------------------------------------------ #
