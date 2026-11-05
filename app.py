@@ -34,6 +34,21 @@ page = st.sidebar.radio(
 st.sidebar.divider()
 st.sidebar.caption(f"DB: `{config.DB_PATH}`")
 st.sidebar.caption(f"Threshold: `{config.CONFIDENCE_THRESHOLD}`")
+
+# Allow setting API key via UI if not already in environment
+if not os.environ.get("ANTHROPIC_API_KEY"):
+    with st.sidebar.expander("🔑 Set API Key", expanded=True):
+        typed_key = st.text_input(
+            "Anthropic API Key",
+            type="password",
+            placeholder="sk-ant-...",
+            key="api_key_input",
+        )
+        if st.button("Apply", key="apply_api_key") and typed_key.strip():
+            os.environ["ANTHROPIC_API_KEY"] = typed_key.strip()
+            st.success("API key set for this session.")
+            st.rerun()
+
 api_set = bool(os.environ.get("ANTHROPIC_API_KEY"))
 st.sidebar.caption(f"API key: {'✅ set' if api_set else '⚠️ not set (mock mode)'}")
 
