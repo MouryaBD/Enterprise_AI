@@ -114,14 +114,34 @@ def import_accounts(xlsx_path: str) -> int:
         val = cell.value
         headers.append(val.strip().lower() if val else "")
 
-    # Map header names to field names
+    # Map header names to field names (including xlsx-specific aliases)
     field_map = {f.lower(): f for f in config.ALL_FIELDS}
     field_map["account_id"] = "account_id"
     field_map["id"] = "account_id"
+    # xlsx aliases
+    field_map["account id"] = "account_id"
+    field_map["business name"] = "business_name"
+    field_map["primary email"] = "email"
+    field_map["primary phone"] = "phone"
+    field_map["billing street"] = "address"
+    field_map["billing city"] = "city"
+    field_map["billing state"] = "state"
+    field_map["billing zip"] = "zip"
+    field_map["date established"] = "date_established"
+    field_map["entity type"] = "entity_type"
+    field_map["type of business"] = "business_description"
+
+    # Track columns that feed into principal_name (first + last combined)
+    principal_first_col = None
+    principal_last_col = None
 
     col_to_field = {}
     for i, h in enumerate(headers):
-        if h in field_map:
+        if h == "principal first name":
+            principal_first_col = i
+        elif h == "principal last name":
+            principal_last_col = i
+        elif h in field_map:
             col_to_field[i] = field_map[h]
 
     conn = _get_conn()
@@ -135,6 +155,12 @@ def import_accounts(xlsx_path: str) -> int:
         for i, val in enumerate(row):
             if i in col_to_field:
                 row_dict[col_to_field[i]] = val
+
+        # Combine principal first + last name
+        first = row[principal_first_col] if principal_first_col is not None and principal_first_col < len(row) else None
+        last = row[principal_last_col] if principal_last_col is not None and principal_last_col < len(row) else None
+        if first or last:
+            row_dict["principal_name"] = " ".join(p for p in [first, last] if p)
 
         account_id = row_dict.get("account_id")
         if not account_id:

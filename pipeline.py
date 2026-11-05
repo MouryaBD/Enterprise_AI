@@ -16,9 +16,12 @@ def run_pipeline(account_id: str, run_id: str, start_stage: int = 1):
     use_mock = os.getenv("ANTHROPIC_API_KEY") is None
     if use_mock:
         extractor = mock_data
+        sources = mock_data
     else:
         import claude_client
+        import real_sources
         extractor = claude_client
+        sources = real_sources
 
     # Set the active run id so write_field can log events
     db._active_run_id = run_id
@@ -31,11 +34,25 @@ def run_pipeline(account_id: str, run_id: str, start_stage: int = 1):
 
         account = db.get_account(account_id)
 
+        # Seed field_results from any pre-existing account data (e.g. imported from xlsx)
+        # so downstream stages cannot overwrite already-known values
+        for _f in config.ALL_FIELDS:
+            if _f not in config.LEGAL_FIELDS and account.get(_f) is not None:
+                field_results[_f] = {
+                    "value": account[_f],
+                    "confidence": 1.0,
+                    "evidence_quote": "pre-existing account data",
+                    "source": "account_seed",
+                }
+
         # ------------------------------------------------------------------ #
         # STAGE 1 — GA SOS legal resolution
         # ------------------------------------------------------------------ #
         if start_stage <= 1:
-            sos_result = mock_data.mock_sos_lookup(account["business_name"])
+            if use_mock:
+                sos_result = mock_data.mock_sos_lookup(account["business_name"])
+            else:
+                sos_result = sources.sos_lookup(account["business_name"])
             if sos_result:
                 legal_data = sos_result
                 db.set_legal_locked(run_id)
@@ -49,7 +66,10 @@ def run_pipeline(account_id: str, run_id: str, start_stage: int = 1):
         # STAGE 2 — Profile lookup
         # ------------------------------------------------------------------ #
         if start_stage <= 2:
-            profile_data = mock_data.mock_profile_lookup(account_id)
+            if use_mock:
+                profile_data = mock_data.mock_profile_lookup(account_id)
+            else:
+                profile_data = sources.profile_lookup(account)
             for field, value in profile_data.items():
                 if value is not None and field in config.ALL_FIELDS:
                     field_results[field] = {
@@ -68,7 +88,14 @@ def run_pipeline(account_id: str, run_id: str, start_stage: int = 1):
         if start_stage <= 3:
             name = account.get("business_name", "")
             address = account.get("address", "")
-            candidates = mock_data.mock_website_candidates(account_id)
+            if use_mock:
+                candidates = mock_data.mock_website_candidates(account_id)
+            else:
+                candidates = sources.website_candidates(
+                    name,
+                    account.get("city", "Athens"),
+                    account.get("state", "GA"),
+                )
             scores = extractor.score_websites(candidates, name, address)
 
             best = None
@@ -197,7 +224,10 @@ def run_pipeline(account_id: str, run_id: str, start_stage: int = 1):
                 if field_results.get(f) is None
             ]
             for field in retry_fields:
-                snippets = mock_data.mock_web_search(field, account.get("business_name", ""))
+                if use_mock:
+                    snippets = mock_data.mock_web_search(field, account.get("business_name", ""))
+                else:
+                    snippets = sources.web_search(field, account.get("business_name", ""), account.get("city", "Athens"))
                 result = extractor.extract_web_consensus(field, snippets)
                 data = result.get(field)
                 if data is not None and field not in field_results:
